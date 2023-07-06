@@ -437,10 +437,10 @@ class AccelerateRLTrainer(BaseRLTrainer):
                     stats[f"reward/mean{sweep_suffix}"] = mean_reward
 
                 # additionally log any other metrics
-                if self.metric_fn:
+                if self._metric_fn:
                     logger.info("Computing metrics")
                     metric_time = time()
-                    metrics = self.metric_fn(samples=str_samples, prompts=str_prompts, outputs=str_outputs, **metadata)
+                    metrics = self._metric_fn(samples=str_samples, prompts=str_prompts, outputs=str_outputs, **metadata)
                     stats["time/metric"] = time() - metric_time
 
                     mean_metrics = {

@@ -238,6 +238,43 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         prompt_dataloader = self.accelerator.prepare_data_loader(prompt_dataloader)
         self.prompt_iterator = infinite_dataloader(prompt_dataloader)
 
+    def mk_model_args(self, input_ids, attention_mask, sample_outputs):
+        if self.config.model.model_arch_type == "seq2seq":
+            decoder_attention_mask = sample_outputs.not_equal(self.tokenizer.pad_token_id)
+            decoder_attention_mask[:, 0] = 1
+
+            args = dict(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_input_ids=sample_outputs,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+        else:
+            all_tokens = torch.cat((input_ids, sample_outputs), dim=1)
+            attention_mask = all_tokens.not_equal(self.tokenizer.pad_token_id).long()
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            args = dict(
+                input_ids=all_tokens,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+            )
+
+        return args
+
+    def ref_fwd(self, *args, **kwargs):
+        if hasattr(self.model, "frozen_head") or self.model.peft_type:
+            return self.model.forward_hydra(*args, **kwargs)
+        else:
+            return self.ref_model(*args, **kwargs)
+
+    def _metric_fn(self, *args, **kwargs):
+        batch = self.tokenizer(["Hello"], return_tensors="pt")
+        sample_outputs = self.tokenizer(["World"], return_tensors="pt")
+        args = self.mk_model_args(batch.input_ids, batch.attention_mask, sample_outputs.input_ids)
+        logits = self.ref_fwd(**args, return_dict=True).logits
+        return {"ref_logit_sum": logits.sum().item()}
+
     def make_experience(self, num_rollouts: int = 1024, iter_count: int = 0):  # noqa:
         """Make experiences
 
