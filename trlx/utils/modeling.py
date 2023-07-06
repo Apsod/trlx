@@ -28,6 +28,8 @@ def freeze_bottom_causal_layers(model: nn.Module, num_layers_unfrozen: int = 0):
         hidden_layers_to_freeze = list(hidden_layers)[:-num_layers_unfrozen]
     else:
         hidden_layers_to_freeze = []
+
+    hidden_layers_to_freeze += [model.transformer.wte, model.transformer.wpe]
     for layer in hidden_layers_to_freeze:
         layer.requires_grad_(False)
 
